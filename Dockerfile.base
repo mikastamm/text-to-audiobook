@@ -1,0 +1,34 @@
+# Base image with dependencies
+FROM pytorch/pytorch:2.6.0-cuda12.4-cudnn9-devel
+
+# Install system dependencies
+RUN apt-get update && \
+    apt-get install -y python3-venv espeak-ng git ffmpeg && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy only the requirements files (avoiding unnecessary cache invalidation)
+COPY audiobook-tts/requirements.txt audiobook-tts/requirements-kokoro.txt audiobook-tts/requirements-zonos.txt ./
+
+# Set up virtual environments
+RUN python -m venv venv_kokoro && \
+    . venv_kokoro/bin/activate && \
+    pip install --upgrade pip && \
+    pip install -r requirements.txt && \
+    pip install -r requirements-kokoro.txt && \
+    deactivate
+
+RUN python -m venv venv_zonos && \
+    . venv_zonos/bin/activate && \
+    pip install --upgrade pip && \
+    pip install torch torchaudio && \
+    pip install --upgrade pip setuptools wheel && \
+    pip install -r requirements.txt && \
+    pip install -r requirements-zonos.txt && \
+    deactivate
+
+# Install global dependencies
+RUN pip install --upgrade pip && \
+    pip install -r requirements.txt
+

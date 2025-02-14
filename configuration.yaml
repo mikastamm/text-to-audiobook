@@ -1,0 +1,28 @@
+# Set your API key in gpt_secret_key.txt, that you need to create in the same directory as this file.
+llm_preprocessing:
+  endpoint: https://openrouter.ai/api/v1        # For usage with openai set this to https://api.openai.com/v1
+  model: google/gemini-2.0-pro-exp-02-05:free   # For usage with openai set this to gpt-4o-latest or any other model
+
+models:
+  # The text will be split and generated in chunks of this lengths, to provide the best output.
+  kokoro:
+    min_characters: 50
+    max_characters: 300
+  zonos:
+    min_characters: 50
+    max_characters: 200
+
+# The following settings are for the audio output. Options: aac, mp3, flac, wav, opus, ogg
+encoding:
+  codec: aac
+  bitrate: 96k
+
+# Controls the duration of pauses inserted by the pause tag.
+shortPauseSec: 0.5
+longPauseSec: 1.5
+
+# How long the pause inserted after each generated chunk of text should be.
+sentenceSilenceSec: 0.5
+
+# whether to apply it loudness normalization to the generated audio
+useLoudnessNormalization: true

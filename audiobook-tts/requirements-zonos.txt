@@ -1,0 +1,7 @@
+torch
+torchaudio
+mamba-ssm
+causal-conv1d
+flash-attn
+pyyaml
+git+https://github.com/Zyphra/Zonos.git

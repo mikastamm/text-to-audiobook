@@ -1,0 +1,17 @@
+venv
+audiobook-tts/hf_cache
+audiobook-tts/_testing
+audiobook-tts/temp
+speakers/*.wav
+speakers/*.mp3
+cline.md
+1-raw-text/*.txt
+2-annotated-text/*.txt
+3-output/*.wav
+3-output/*.mp3
+3-output/*.ogg
+3-output/*.flac
+3-output/*.opus
+3-output/*.m4a
+*/__pycache__
+gpt_secret_key.txt

@@ -1,0 +1,9 @@
+pydub
+sounddevice
+soundfile
+scipy
+ffmpeg-normalize
+
+langchain
+langchain_community 
+openai
