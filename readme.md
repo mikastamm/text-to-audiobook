@@ -29,7 +29,7 @@ Dialogue starts at second 23
 
 ### **1. Clone the Repository**  
 ```sh
-git clone [https://github.com/your-username/your-repo.git](https://github.com/mikastamm/text-to-audiobook.git)
+git clone https://github.com/mikastamm/text-to-audiobook.git
 cd your-repo
 ```
 
