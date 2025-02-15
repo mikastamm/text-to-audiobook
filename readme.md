@@ -1,5 +1,5 @@
 
-# Multi-Engine Text-to-Speech (TTS) System  
+# Multi-Speaker Audiobook-Generator from plain text files
 
 This project is designed to create multi-speaker audiobooks from short to medium-length stories. It supports **Kokoro** and **Zonos** voice synthesis and includes some demo voices.
 
