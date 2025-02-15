@@ -3,6 +3,10 @@ llm_preprocessing:
   endpoint: https://openrouter.ai/api/v1        # For usage with openai set this to https://api.openai.com/v1
   model: google/gemini-2.0-pro-exp-02-05:free   # For usage with openai set this to gpt-4o-latest or any other model
 
+# The narrator used when no specific speaker is defined.
+# af_heart is also a good narrator
+default_speaker: af_bella 
+
 models:
   # The text will be split and generated in chunks of this lengths, to provide the best output.
   kokoro:

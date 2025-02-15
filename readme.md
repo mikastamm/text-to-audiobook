@@ -98,11 +98,13 @@ Using real recorded audio from a professional speaker in a good quality of a len
 
 ### Zonos
 
-Sonos supports voice cloning given an example of the speaker you would like to clone. Place 10 to 60 second audio clips of them in the speakers directory. 
+Sonos supports voice cloning given an example of the speaker you would like to clone. Place 10 to 60 second audio clips of them in the `0-speakers` directory. 
 
 I recommend you try them out int the [Zonos Playground](https://playground.zyphra.com/sign-in?redirect_url=https%3A%2F%2Fplayground.zyphra.com%2Faudio) to see whether they produce good results 
 
-If you are having a language model assigned speakers it makes sense to give them a very descriptive name including the gender and where you would like to use them.
+If you are are using automatic speaker assignment it makes sense to give them a very descriptive name including the gender and where you would like to use them eg.: `s_male_german_young_friendly`
+
+All audio files in the speaker directory will automatically be made available for the automatic speaker assigner to choose from.
 
 You can optionally grade the speakers in the filename which will affect how they are presented in the prompt. 
 `s_*.wav`: S-Tier, will be used most often and for main characters

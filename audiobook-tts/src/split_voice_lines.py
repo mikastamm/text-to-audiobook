@@ -18,7 +18,7 @@ zonos_max_chars = config["models"]["zonos"]["max_characters"]
 
 ABBREVS = {"dr", "mr", "mrs", "ms", "etc"}  # Lowercase set for quick check
 
-def parse_speakers(full_text, default_voice="af_bella"):
+def parse_speakers(full_text, default_voice):
     """
     Extract segments of text under <speaker ...>...</speaker> tags.
     Recognizes tags with extra attributes:
@@ -187,7 +187,7 @@ def combine_into_blocks(sentences, min_chars, max_chars):
 
 # --- Main function: split_voice_lines ---
 
-def split_voice_lines(input_file=None, input_dir="2-annotated-text", temp_folder="temp", default_voice="af_bella"):
+def split_voice_lines(input_file=None, input_dir="2-annotated-text", temp_folder="temp"):
     """
     Processes a single text file (input_file) or all text files in input_dir and creates a unified metadata file in temp_folder.
     Each metadata entry:
@@ -199,6 +199,8 @@ def split_voice_lines(input_file=None, input_dir="2-annotated-text", temp_folder
       - source: which text file it came from
     Writes temp_folder/metadata_split.json
     """
+    default_voice = config["default_speaker"]
+    
     if not os.path.exists(temp_folder):
         os.makedirs(temp_folder)
 
