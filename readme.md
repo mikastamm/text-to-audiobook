@@ -1,18 +1,29 @@
 
 # Multi-Engine Text-to-Speech (TTS) System  
 
-This project is designed to create multi-speaker audiobooks from short to medium-length stories. It supports **Kokoro** and **Zonos** voice synthesis, 
+This project is designed to create multi-speaker audiobooks from short to medium-length stories. It supports **Kokoro** and **Zonos** voice synthesis and includes some demo voices.
 
 ## Features  
 ✅ Supports **Kokoro** and **Zonos** TTS models
+
   ☑️ Both can be mixed in the same audio file  
+  
 ✅ Local voice synthesis 
+
 ✅ Uses a language model to assign speakers to text & improve speakability
+
 ✅ Speaker assignment through `<speaker voice="name">` tags  
+
 ✅ Batch processing of multiple files
+
 ✅ Loudness normalization for consistent audio levels
 
+
 ## Example
+
+https://github.com/user-attachments/assets/7c779dd9-98ec-46b1-8e96-47e4641816e7
+
+Dialogue starts at second 23
 
 ## Installation  
 
@@ -68,11 +79,18 @@ The result will be written to the `2-annotated-text` folder.
 text files placed into the `2-annotated-text` in the following format.
 
 >`This will be spoken by the narrator that is set in the configuration.yml`
+>
 >`<speaker voice="af_heart">This text will be spoken by a af_heart</speaker>`
+>
 >`<pause duration='long'> This will be spoken after a long pause `
+>
 >`<pause duration='short'> This will be spoken after a short pause` 
 
 ## Adding New Voices  
+
+The project already includes some zonos speakers. However, since only short reference audios, generated from major tts provider are included, their quality is not as high as it could be. 
+
+Using real recorded audio from a professional speaker in a good quality of a length from 30 to 60 seconds results in much better outputs.
 
 ### Zonos
 
