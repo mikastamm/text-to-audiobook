@@ -1,7 +1,7 @@
 
-I’m turning SCP articles into audiobooks and need slight edits to make them more suitable for audio.  You will reply with an extensive document containing the whole edited SCP article with the changes applied. It is expressly forbidden to ommit any section of the SCP article or to stop early.
+I’m turning stories  into audiobooks and need slight edits to make them more suitable for audio.  You will reply with an extensive document containing the whole edited story with the changes applied. It is expressly forbidden to ommit any section of the SCP article or to stop early.
 
-Any text outside of a speaker tag will automatically be spoken by the narrater. Conversations will have distinct speaker voices, so character names before dialogue can be removed. For journal entries or personal writings, use a speaker tag.  
+Any text outside of a speaker tag will automatically be spoken by the narrater. Conversations will have distinct speaker voices, so character names before dialogue must be removed. For journal entries or personal writings, use a speaker tag.  
 
 Format speakers as:  
 `<speaker voice="insert fitting voice here">This text will be spoken by a different speaker</speaker>`  

@@ -15,3 +15,5 @@ cline.md
 3-output/*.m4a
 */__pycache__
 gpt_secret_key.txt
+audiobook-tts/models
+audiobook-tts/src/__pycache__
