@@ -4,15 +4,15 @@
 This project is designed to create multi-speaker audiobooks from short to medium-length stories. It supports **Kokoro** and **Zonos** voice synthesis and includes some demo voices.
 
 ## Features  
-✅ Supports **Kokoro** and **Zonos** TTS models
+✅ create multi-speaker audiobook style audios from raw text files
 
-  ☑️ Both can be mixed in the same audio file  
+✅ Supports **Kokoro** and **Zonos** TTS models in the same audio file
   
 ✅ Local voice synthesis 
 
-✅ Uses a language model to assign speakers to text & improve speakability
+✅ Automatic speaker assignment through a language model
 
-✅ Speaker assignment through `<speaker voice="name">` tags  
+✅ Manual speaker assignment through `<speaker voice="name">` tags  
 
 ✅ Batch processing of multiple files
 
@@ -55,7 +55,9 @@ put your open router api key in the `gpt_secret_key` file (If you want to use th
 
 ## System Requirements
 Docker
+
 CUDA capable GPU
+
 ~5GB VRAM if using Zonos (You can only use Kokoro if you have less.)
 
 ## How do I get a good result?
@@ -71,7 +73,9 @@ Zono's models are great for dialogue and conversations between characters as it 
 
 ### Automatic Annotation
 Automatic annotation requires the API key to be set in gpt_secret_key.txt.
+
 For each file in `1-raw-text` it will automatically prompt the language model with the prompt defined in `prompts/edit-raw-story-prompt.md` To annotate speakers and make minor changes such as writing out dates into words.
+
 The result will be written to the `2-annotated-text` folder.
 
 ### Manual Annotation
