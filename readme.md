@@ -107,9 +107,13 @@ If you are are using automatic speaker assignment it makes sense to give them a 
 All audio files in the speaker directory will automatically be made available for the automatic speaker assigner to choose from.
 
 You can optionally grade the speakers in the filename which will affect how they are presented in the prompt. 
+
 `s_*.wav`: S-Tier, will be used most often and for main characters
+
 `a_*.wav`: A-Tier, will be used for secondary characters
+
 `b_*.wav`: B-Tier, will be used as a fallback for when you run out.
+
 `x_*.wav`: X-Tier, will be used for special voices (think evil, robot etc.)`
 
 ### Kokoro
