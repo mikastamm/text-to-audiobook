@@ -5,7 +5,7 @@ audiobook-tts/temp
 speakers/*.wav
 speakers/*.mp3
 cline.md
-1-raw-text/*.txt
+1-raw-text/*
 2-annotated-text/*.txt
 3-output/*.wav
 3-output/*.mp3
@@ -17,7 +17,7 @@ cline.md
 gpt_secret_key.txt
 audiobook-tts/models
 audiobook-tts/src/__pycache__
-
+0-xNext
 0-speakers/*
 !0-speakers/a_female_calm_young.bin
 !0-speakers/a_female_kind_professional.bin

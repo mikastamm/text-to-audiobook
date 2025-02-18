@@ -4,4 +4,5 @@ mamba-ssm
 causal-conv1d
 flash-attn
 pyyaml
-git+https://github.com/Zyphra/Zonos.git
+git+https://github.com/Zyphra/Zonos.git@2878f03
+
