@@ -3,6 +3,7 @@ sounddevice
 soundfile
 scipy
 ffmpeg-normalize
+silero-vad
 
 langchain
 langchain_community 

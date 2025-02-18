@@ -134,7 +134,7 @@ class LongChainTextPreprocessor:
         processed_files = set(os.listdir("2-annotated-text"))
         return [f for f in raw_files if f not in processed_files]
 
-    def _split_text_into_chunks(self, text: str, chunk_size: int = 500) -> List[str]:
+    def _split_text_into_chunks(self, text: str, chunk_size: int = 200) -> List[str]:
         """Split text into chunks of specified number of lines."""
         lines = text.splitlines()
         return ['\n'.join(lines[i:i + chunk_size])
@@ -190,21 +190,25 @@ class LongChainTextPreprocessor:
         all_chunks_succeeded = True
         for i, chunk in enumerate(chunks, 1):
             previous_chunks_text = '\n'.join(processed_chunks)
-            max_attempts = 3
+            max_attempts =3
             attempt = 0
             success = False
             current_generated = ""
             while attempt < max_attempts and not success:
                 attempt += 1
-                sys.stdout.write("\r" + " " * 80 + "\r")
-                current_generated = self._stream_process_chunk(chunk, previous_chunks_text,
-                                                               accepted_segments, total_expected_chars, chunk_index=i-1)
-                input_length = len(chunk)
-                output_length = len(current_generated)
-                if output_length < 0.75 * input_length or output_length > 2 * input_length:
-                    time.sleep(1)
-                else:
-                    success = True
+                try:
+                
+                    sys.stdout.write("\r" + " " * 80 + "\r")
+                    current_generated = self._stream_process_chunk(chunk, previous_chunks_text,
+                                                                accepted_segments, total_expected_chars, chunk_index=i-1)
+                    input_length = len(chunk)
+                    output_length = len(current_generated)
+                    if output_length < 0.6 * input_length or output_length > 2.5 * input_length:
+                        time.sleep(100)
+                    else:
+                        success = True
+                except Exception as e:
+                    time.sleep(2000)
             if success:
                 accepted_segments.append((i-1, len(current_generated)))
                 processed_chunks.append(current_generated)

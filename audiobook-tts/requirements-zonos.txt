@@ -3,6 +3,7 @@ torchaudio
 mamba-ssm
 causal-conv1d
 flash-attn
+silero-vad
 pyyaml
 git+https://github.com/Zyphra/Zonos.git@2878f03
 

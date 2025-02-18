@@ -7,7 +7,7 @@ import torch
 from zonos.model import Zonos
 from zonos.conditioning import make_cond_dict
 import yaml
-from generate_helper import print_generation_status
+from generate_helper import print_generation_status, exceeds_silence_duration_threshold
 
 SILENCE_THRESHOLD = 0.001
 
@@ -16,9 +16,6 @@ with open("configuration.yaml", "r") as f:
 
 zonos_min_chars = config["models"]["zonos"]["min_characters"]
 zonos_max_chars = config["models"]["zonos"]["max_characters"]
-
-
-
 
 def get_emotion(emotion_name):
     """
@@ -102,6 +99,8 @@ def generate_zonos_voice_lines(
 
     generated_metadata = []
     
+    max_attempts = config['models']['zonos']['max_retries']  # Maximum number of retries per entry
+    max_silence_durationSeconds = config['models']['zonos'].get('max_silence_duration', 0)
     i = 0
     for entry in zonos_entries:
         i += 1
@@ -112,9 +111,9 @@ def generate_zonos_voice_lines(
 
         print_generation_status("Zonos", i, len(zonos_entries), len(text_chunk), zonos_min_chars, zonos_max_chars, text_chunk)
 
+        # Prepare conditioning parameters (these remain the same across retries)
         speaker_embedding = get_speaker_embedding(voice_name)
         emotion = get_emotion(emotion_tag).to(device)
-
         cond_dict = make_cond_dict(text=text_chunk, speaker=speaker_embedding, emotion=emotion, language="en-us")
         conditioning = model.prepare_conditioning(cond_dict)
 
@@ -126,127 +125,77 @@ def generate_zonos_voice_lines(
         duration_ms = 250
         sampling_rate = model.autoencoder.sampling_rate
         num_samples = int(sampling_rate * duration_ms / 1000)
-
         wav_prefix = torch.zeros(1, num_samples, device=device, dtype=torch.float32)
 
         with torch.autocast(device_str, dtype=torch.float32):
             audio_prefix_codes = model.autoencoder.encode(wav_prefix.unsqueeze(0))
 
-        print("\033[90m")
-        codes = model.generate(
-            prefix_conditioning=conditioning,
-            audio_prefix_codes=audio_prefix_codes,
-            sampling_params=generation_params)
-        print("\033[0m")
+        # Attempt generation up to max_attempts times
+        for attempt in range(max_attempts):
+            print("\033[90m")
+            codes = model.generate(
+                prefix_conditioning=conditioning,
+                audio_prefix_codes=audio_prefix_codes,
+                sampling_params=generation_params)
+            print("\033[0m")
 
-        wavs = model.autoencoder.decode(codes)
-        wavs = wavs.cpu().numpy()
-        samples = wavs[0]
+            wavs = model.autoencoder.decode(codes)
+            wavs = wavs.cpu().numpy()
+            samples = wavs[0]
 
-        while samples.ndim > 2:
-            samples = np.squeeze(samples, axis=0)
+            while samples.ndim > 2:
+                samples = np.squeeze(samples, axis=0)
 
-        samples = samples.astype(np.float32)
-        sampling_rate = model.autoencoder.sampling_rate
+            samples = samples.astype(np.float32)
+            sampling_rate = model.autoencoder.sampling_rate
 
-        if samples.ndim == 2:
-            samples = samples.transpose(1, 0)
+            if samples.ndim == 2:
+                samples = samples.transpose(1, 0)
 
-        out_filename = os.path.join(temp_folder, f"chunk_{idx:04d}.wav")
-        sf.write(out_filename, samples, sampling_rate)
+            out_filename = os.path.join(temp_folder, f"chunk_{idx:04d}.wav")
+            sf.write(out_filename, samples, sampling_rate)
 
-        data, samplerate = sf.read(out_filename)
-        average_amplitude = np.mean(np.abs(data))
-        if average_amplitude < SILENCE_THRESHOLD:
-            print(f"\033[31mEmpty output detected, trying again\033[0m")
-            continue
+            data, samplerate = sf.read(out_filename)
+            average_amplitude = np.mean(np.abs(data))
+            if average_amplitude < SILENCE_THRESHOLD:
+                print(f"\033[31mEmpty output detected on attempt {attempt + 1}, trying again\033[0m")
+                if attempt == max_attempts - 1:
+                    print(f"Max attempts reached for entry {idx}. Skipping this entry.")
+                continue
 
-        entry["filename"] = out_filename
-        generated_metadata.append(entry)
+            # If a maximum silence duration is set, resample to 16 kHz and check using the VAD helper.
+            if max_silence_durationSeconds:
+                resampled_filename = os.path.join(temp_folder, f"chunk_{idx:04d}_16kHz.wav")
+                ffmpeg_cmd = f'ffmpeg -y -i "{out_filename}" -ar 16000 "{resampled_filename}"'
+                os.system(ffmpeg_cmd)
+                if not exceeds_silence_duration_threshold(resampled_filename, max_silence_durationSeconds):
+                    if attempt < max_attempts - 1:
+                        debug_filename = os.path.join(temp_folder, f"chunk_{idx:04d}_debug.wav")
+                        os.rename(out_filename, debug_filename)
+                        print(f"\033[31mSilence threshold exceeded on attempt {attempt + 1}, regenerating...\033[0m")
+                        continue
+                    else:
+                        print(f"Silence threshold exceeded on last attempt {attempt + 1}, using the result.")
 
+            # Valid generation; save metadata and break out of the retry loop.
+            entry["filename"] = out_filename
+            generated_metadata.append(entry)
+            break
+
+    # Save generated metadata.
     gen_metadata_file = os.path.join(temp_folder, "metadata_generated_zonos.json")
     with open(gen_metadata_file, "w", encoding="utf-8") as f:
         json.dump(generated_metadata, f, indent=2)
-        
-        
-# Predefined emotion vectors
+
+# Predefined emotion vectors.
 EMOTION_VECTORS = {
-    "happy": torch.tensor([[
-        0.8,  # Happiness 😊
-        0.05, # Sadness 😢
-        0.02, # Disgust 🤢
-        0.02, # Fear 😨
-        0.05, # Surprise 😲
-        0.03, # Anger 😡
-        0.02, # Other 🤷
-        0.01  # Neutral 😐
-    ]], dtype=torch.float32),
-
-    "sad": torch.tensor([[
-        0.05, # Happiness 😊
-        0.8,  # Sadness 😢
-        0.02, # Disgust 🤢
-        0.02, # Fear 😨
-        0.03, # Surprise 😲
-        0.03, # Anger 😡
-        0.02, # Other 🤷
-        0.03  # Neutral 😐
-    ]], dtype=torch.float32),
-
-    "disgusted": torch.tensor([[
-        0.02, # Happiness 😊
-        0.02, # Sadness 😢
-        0.8,  # Disgust 🤢
-        0.05, # Fear 😨
-        0.02, # Surprise 😲
-        0.05, # Anger 😡
-        0.02, # Other 🤷
-        0.02  # Neutral 😐
-    ]], dtype=torch.float32),
-
-    "fearful": torch.tensor([[
-        0.02, # Happiness 😊
-        0.02, # Sadness 😢
-        0.05, # Disgust 🤢
-        0.8,  # Fear 😨
-        0.02, # Surprise 😲
-        0.03, # Anger 😡
-        0.02, # Other 🤷
-        0.02  # Neutral 😐
-    ]], dtype=torch.float32),
-
-    "surprised": torch.tensor([[
-        0.05, # Happiness 😊
-        0.02, # Sadness 😢
-        0.02, # Disgust 🤢
-        0.02, # Fear 😨
-        0.8,  # Surprise 😲
-        0.05, # Anger 😡
-        0.02, # Other 🤷
-        0.02  # Neutral 😐
-    ]], dtype=torch.float32),
-
-    "angry": torch.tensor([[
-        0.02, # Happiness 😊
-        0.02, # Sadness 😢
-        0.05, # Disgust 🤢
-        0.05, # Fear 😨
-        0.02, # Surprise 😲
-        0.8,  # Anger 😡
-        0.02, # Other 🤷
-        0.02  # Neutral 😐
-    ]], dtype=torch.float32),
-
-    "neutral": torch.tensor([[
-        0.1,  # Happiness 😊
-        0.1,  # Sadness 😢
-        0.1,  # Disgust 🤢
-        0.1,  # Fear 😨
-        0.1,  # Surprise 😲
-        0.1,  # Anger 😡
-        0.1,  # Other 🤷
-        0.3   # Neutral 😐 (Favoring neutral slightly)
-    ]], dtype=torch.float32)
+    "happy": torch.tensor([[0.8, 0.05, 0.02, 0.02, 0.05, 0.03, 0.02, 0.01]], dtype=torch.float32),
+    "sad": torch.tensor([[0.05, 0.8, 0.02, 0.02, 0.03, 0.03, 0.02, 0.03]], dtype=torch.float32),
+    "disgusted": torch.tensor([[0.02, 0.02, 0.8, 0.05, 0.02, 0.05, 0.02, 0.02]], dtype=torch.float32),
+    "fearful": torch.tensor([[0.02, 0.02, 0.05, 0.8, 0.02, 0.03, 0.02, 0.02]], dtype=torch.float32),
+    "surprised": torch.tensor([[0.05, 0.02, 0.02, 0.02, 0.8, 0.05, 0.02, 0.02]], dtype=torch.float32),
+    "angry": torch.tensor([[0.02, 0.02, 0.05, 0.05, 0.02, 0.8, 0.02, 0.02]], dtype=torch.float32),
+    "neutral": torch.tensor([[0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.3]], dtype=torch.float32)
 }
 
 if __name__ == "__main__":
