@@ -5,7 +5,7 @@ audiobook-tts/temp
 speakers/*.wav
 speakers/*.mp3
 cline.md
-1-raw-text/*
+
 2-annotated-text/*.txt
 3-output/*.wav
 3-output/*.mp3
