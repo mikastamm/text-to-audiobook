@@ -163,10 +163,10 @@ class LongChainTextPreprocessor:
 
     @staticmethod
     def _voice_exists(voice: str) -> bool:
-        """Check if a voice exists in 0-speakers or is a built-in cockroach voice."""
+        """Check if a voice exists in speakers or is a built-in kokoro voice."""
         if voice in {"af_heart", "af_bella"}:
             return True
-        speakers_dir = "0-speakers"
+        speakers_dir = "speakers"
         if not os.path.exists(speakers_dir):
             return False
         for filename in os.listdir(speakers_dir):
