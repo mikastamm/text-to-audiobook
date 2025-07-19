@@ -168,6 +168,7 @@ def merge_voice_lines(temp_folder="temp", output_folder="3-output"):
         # Build FFmpeg command for final conversion.
         ffmpeg_command = [
             "ffmpeg",
+            "-hide_banner", "-loglevel", "error",
             "-i", intermediate_wav
         ]
         if use_loudness_normalization:

@@ -94,7 +94,7 @@ def listAvailableVoices():
 
     return voices
 
-def resolve_voice_name(voice: str, speakers_dir: str = "0-speakers") -> Optional[str]:
+def resolve_voice_name(voice: str, speakers_dir: str = "/app/speakers") -> Optional[str]:
     """Return a matching voice name if available, trying alternate tier prefixes."""
     if voice in {"af_heart", "af_bella"}:
         return voice

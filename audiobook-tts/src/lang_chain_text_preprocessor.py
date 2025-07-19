@@ -181,7 +181,7 @@ class LongChainTextPreprocessor:
         """Rudimentary token estimate used for chunk sizing."""
         return max(1, len(text) // 4)
 
-    def _split_text_into_chunks(self, text: str, max_tokens: int = 8000) -> List[str]:
+    def _split_text_into_chunks(self, text: str, max_tokens: int) -> List[str]:
         """Split text into chunks based on an estimated token limit."""
         lines = text.splitlines()
         chunks: List[str] = []
@@ -262,14 +262,14 @@ class LongChainTextPreprocessor:
         with open(input_path, 'r', encoding='utf-8') as f:
             text = f.read()
         total_expected_chars = len(text)
-        chunks = self._split_text_into_chunks(text, max_tokens=8000)
+        chunks = self._split_text_into_chunks(text, max_tokens=64000)
         processed_chunks = []
         accepted_segments: List[Tuple[int, int]] = []
         all_chunks_succeeded = True
         update_progress(self.current_file_identifier, MyProgressBar([], total_expected_chars, 0, self.current_file_identifier).render_string())
         for i, chunk in enumerate(chunks, 1):
             previous_chunks_text = '\n'.join(processed_chunks)
-            max_attempts = 3
+            max_attempts = 5
             attempt = 0
             success = False
             current_generated = ""
@@ -323,7 +323,7 @@ class LongChainTextPreprocessor:
             processor = LongChainTextPreprocessor()
             processor.process_file(fname)
 
-        max_workers = min(3, len(unprocessed_files))
+        max_workers = min(8, len(unprocessed_files))
         stop_event = threading.Event()
         printer = threading.Thread(target=progress_printer, args=(stop_event,), daemon=True)
         printer.start()

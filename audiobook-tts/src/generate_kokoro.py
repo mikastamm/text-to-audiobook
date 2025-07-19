@@ -79,12 +79,10 @@ def generate_kokoro_voice_lines(modelPath, voicesPath, temp_folder="temp", voice
     for entry in kokoro_entries:
         idx = entry["index"]
         voice = entry["voice"]
-        resolved_voice = resolve_voice_name(voice, speakers_dir=voicesPath)
-        if resolved_voice and resolved_voice != voice:
-            print(f"\033[90mResolved voice {voice} -> {resolved_voice}\033[0m")
-            voice = resolved_voice
-        elif resolved_voice is None:
-            print(f"\033[33mVoice {voice} not found; using provided name anyway.\033[0m")
+        if voice not in {"af_heart", "af_bella"}:
+            voice = "am_michael"
+            print(f"\033[33mUsing default voice {voice} for entry {idx} as it is not af_heart or af_bella.\033[0m")
+    
         text_chunk = entry["text"]
         out_filename = os.path.join(temp_folder, f"chunk_{idx:04d}.wav")
 
