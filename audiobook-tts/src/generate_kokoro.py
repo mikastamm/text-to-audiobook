@@ -7,6 +7,9 @@ import yaml
 from kokoro_onnx import Kokoro
 from kokoro_onnx.config import SAMPLE_RATE
 from generate_helper import print_generation_status
+import onnxruntime as ort
+
+
 
 with open("configuration.yaml", "r") as f:
     config = yaml.safe_load(f)
@@ -68,10 +71,12 @@ def generate_kokoro_voice_lines(modelPath, voicesPath, temp_folder="temp", voice
     if not kokoro_entries:
         print("No entries found for Kokoro generation.")
         return
-
+    
     # Create Kokoro instance using the downloaded files.
     kokoro = Kokoro(modelPath, voicesPath)
-    
+    privders = ort.get_available_providers()
+    print("Available providers:", privders)  # Make sure CUDAExecutionProvider is listed
+    print(f'Is CUDA available: {"CUDAExecutionProvider" in privders}')
     generated_metadata = []
     for entry in kokoro_entries:
         idx = entry["index"]

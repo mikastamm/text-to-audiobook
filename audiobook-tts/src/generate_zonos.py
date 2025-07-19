@@ -125,7 +125,7 @@ def generate_zonos_voice_lines(
             wav_prefix = torch.zeros(1, num_samples, device=device, dtype=torch.float32)
             with torch.autocast(device_str, dtype=torch.float32):
                 audio_prefix_codes = model.autoencoder.encode(wav_prefix.unsqueeze(0))
-                codes = model.generate(prefix_conditioning=conditioning, audio_prefix_codes=audio_prefix_codes, sampling_params=dict(min_p=min_p))
+            codes = model.generate(prefix_conditioning=conditioning, audio_prefix_codes=audio_prefix_codes, sampling_params=dict(min_p=min_p))
             wavs = model.autoencoder.decode(codes)
             samples = wavs[0].cpu().numpy()
             while samples.ndim > 2:
