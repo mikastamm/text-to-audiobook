@@ -26,6 +26,9 @@ If the story has multiple unrelated sections, you may reuse voices you have used
 Available Voices:
 {voices}
 
+Character summary:
+{character_summary}
+
 Only choose from these. There are no other voices available
 
 For timestamps, convert them into natural language, showing elapsed time only if relevant.  
