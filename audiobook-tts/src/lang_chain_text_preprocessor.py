@@ -1,4 +1,5 @@
 import os
+import re
 import yaml
 from typing import List, Optional, Tuple
 import time
@@ -155,6 +156,31 @@ class LongChainTextPreprocessor:
                     voice_list.append(f"- {voice}")
         return "\n".join(voice_list)
 
+    @staticmethod
+    def _extract_voices(text: str) -> List[str]:
+        """Return all voice names referenced in <speaker> tags in the text."""
+        return re.findall(r'<speaker[^>]*voice="([^"]+)"[^>]*>', text, flags=re.IGNORECASE)
+
+    @staticmethod
+    def _voice_exists(voice: str) -> bool:
+        """Check if a voice exists in 0-speakers or is a built-in cockroach voice."""
+        if voice in {"af_heart", "af_bella"}:
+            return True
+        speakers_dir = "0-speakers"
+        if not os.path.exists(speakers_dir):
+            return False
+        for filename in os.listdir(speakers_dir):
+            name, _ = os.path.splitext(filename)
+            if name == voice:
+                return True
+        return False
+
+    def _all_voices_exist(self, text: str) -> Tuple[bool, List[str]]:
+        """Return True if every voice referenced in the text exists."""
+        voices = self._extract_voices(text)
+        missing = [v for v in voices if not self._voice_exists(v)]
+        return len(missing) == 0, missing
+
     def _stream_process_chunk(self, chunk: str, previous_chunk: Optional[str],
                               accepted_segments: List[Tuple[int, int]],
                               total_expected_chars: int, chunk_index: int) -> str:
@@ -207,7 +233,12 @@ class LongChainTextPreprocessor:
                     if output_length < 0.6 * input_length or output_length > 2.5 * input_length:
                         time.sleep(1)
                     else:
-                        success = True
+                        voices_ok, missing = self._all_voices_exist(current_generated)
+                        if not voices_ok:
+                            print(colored(f"Retrying chunk due to unknown voices: {', '.join(missing)}", 'yellow'))
+                            time.sleep(1)
+                        else:
+                            success = True
                 except Exception as e:
                     time.sleep(20)
             if success:
