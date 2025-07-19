@@ -178,12 +178,22 @@ def merge_voice_lines(temp_folder="temp", output_folder="3-output"):
             "-y",  # Overwrite output file if it exists.
             final_output
         ]
+
         result = subprocess.run(ffmpeg_command, capture_output=True, text=True)
         if result.returncode == 0:
             os.remove(intermediate_wav)
             print_header(f"Success! Final output at {final_output}")
         else:
             print(f"\033[31mFFmpeg conversion failed: {result.stderr}\033[0m")
+
+    # Clean up temporary files once all sources have been processed
+    for fname in os.listdir(temp_folder):
+        if fname.startswith("chunk_") and fname.endswith(".wav"):
+            os.remove(os.path.join(temp_folder, fname))
+    for meta in ["metadata_split.json", "metadata_generated_zonos.json", "metadata_generated_kokoro.json"]:
+        path = os.path.join(temp_folder, meta)
+        if os.path.exists(path):
+            os.remove(path)
 
 if __name__ == "__main__":
     merge_voice_lines()

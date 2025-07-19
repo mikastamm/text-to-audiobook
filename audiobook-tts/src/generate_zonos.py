@@ -150,6 +150,18 @@ def generate_zonos_voice_lines(
         text_chunk = entry["text"]
         emotion_tag = entry.get("emotion", "")
 
+        out_filename = os.path.join(temp_folder, f"chunk_{idx:04d}.wav")
+        if os.path.exists(out_filename):
+            try:
+                info = sf.info(out_filename)
+                if info.frames > 0:
+                    print(f"\033[90mChunk {idx} already exists. Skipping generation.\033[0m")
+                    entry["filename"] = out_filename
+                    generated_metadata.append(entry)
+                    continue
+            except Exception:
+                print(f"\033[33mExisting file {out_filename} is invalid. Regenerating.\033[0m")
+
         print_generation_status("Zonos", i, len(zonos_entries), len(text_chunk), zonos_min_chars, zonos_max_chars, text_chunk)
 
         # Prepare conditioning parameters (these remain the same across retries)
@@ -193,7 +205,6 @@ def generate_zonos_voice_lines(
             if samples.ndim == 2:
                 samples = samples.transpose(1, 0)
 
-            out_filename = os.path.join(temp_folder, f"chunk_{idx:04d}.wav")
             sf.write(out_filename, samples, sampling_rate)
 
             data, samplerate = sf.read(out_filename)
