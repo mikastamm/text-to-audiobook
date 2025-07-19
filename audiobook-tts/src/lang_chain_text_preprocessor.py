@@ -13,6 +13,7 @@ from langchain.callbacks.base import BaseCallbackHandler
 from langchain.callbacks.manager import CallbackManager
 
 from generate_helper import listAvailableVoices, resolve_voice_name
+from text_utils import TextUtils
 
 def colored(text: str, color: str) -> str:
     color_codes = {
@@ -123,8 +124,10 @@ class LongChainTextPreprocessor:
     def __init__(self, config_path: str = "configuration.yaml"):
         self.config = self._load_config(config_path)
         self.llm = self._setup_llm()
-        # Load only the editing prompt (character analysis prompt removed)
+        # Load prompts
         self.edit_prompt = self._load_prompt("prompts/edit-raw-story-prompt.md")
+        self.speaker_prompt = self._load_prompt(
+            "prompts/determine-and-summarize-speakers-prompt.md")
         
     def _load_config(self, config_path: str) -> dict:
         """Load configuration from YAML file."""
@@ -181,24 +184,9 @@ class LongChainTextPreprocessor:
         """Rudimentary token estimate used for chunk sizing."""
         return max(1, len(text) // 4)
 
-    def _split_text_into_chunks(self, text: str, max_tokens: int = 8000) -> List[str]:
-        """Split text into chunks based on an estimated token limit."""
-        lines = text.splitlines()
-        chunks: List[str] = []
-        current_lines: List[str] = []
-        token_count = 0
-        for line in lines:
-            line_tokens = self._estimate_tokens(line + "\n")
-            if token_count + line_tokens > max_tokens and current_lines:
-                chunks.append("\n".join(current_lines))
-                current_lines = [line]
-                token_count = line_tokens
-            else:
-                current_lines.append(line)
-                token_count += line_tokens
-        if current_lines:
-            chunks.append("\n".join(current_lines))
-        return chunks
+    def _split_text_into_chunks(self, text: str, max_chars: int = 10000) -> List[str]:
+        """Split text into chunks without cutting sentences."""
+        return TextUtils.chunk_text(text, max_chars=max_chars)
 
     @staticmethod
     def getVoiceString() -> str:
@@ -230,9 +218,17 @@ class LongChainTextPreprocessor:
         missing = [v for v in voices if not self._voice_exists(v)]
         return len(missing) == 0, missing
 
-    def _stream_process_chunk(self, chunk: str, previous_chunk: Optional[str],
-                              accepted_segments: List[Tuple[int, int]],
-                              total_expected_chars: int, chunk_index: int) -> str:
+    def _determine_speakers(self, text: str) -> str:
+        """Use the language model to summarize all speakers in the text."""
+        prompt = ChatPromptTemplate.from_template(self.speaker_prompt)
+        messages = prompt.format_messages(
+            voices=self.getVoiceString(),
+            text=text,
+        )
+        result = self.llm.invoke(messages)
+        return result.content.strip() if hasattr(result, "content") else str(result)
+
+    def _stream_process_chunk(self, chunk: str, chunk_index: int, summary: str) -> str:
         """
         Process a single chunk with streaming.
         A MyProgressBar instance is created to reflect overall progress,
@@ -241,18 +237,42 @@ class LongChainTextPreprocessor:
         prompt = ChatPromptTemplate.from_template(self.edit_prompt)
         messages = prompt.format_messages(
             voices=self.getVoiceString(),
-            previous_chunk=previous_chunk if previous_chunk else "None",
+            character_summary=summary,
             text=chunk
         )
-        progress_bar = MyProgressBar(accepted_segments, total_expected_chars, chunk_index, self.current_file_identifier)
-        update_progress(self.current_file_identifier, progress_bar.render_string())
+        identifier = f"{self.current_file_identifier}-{chunk_index}"
+        progress_bar = MyProgressBar([], len(chunk), chunk_index, identifier)
+        update_progress(identifier, progress_bar.render_string())
         callback = ProgressCallback(progress_bar)
         # Temporarily add the callback to the LLM's callback manager.
         self.llm.callback_manager.add_handler(callback)
         for _ in self.llm.invoke(messages, stream=True):
             pass
         self.llm.callback_manager.remove_handler(callback)
+        with progress_lock:
+            progress_states.pop(identifier, None)
         return callback.collected_text
+
+    def _process_chunk_with_retry(self, chunk: str, chunk_index: int, summary: str, max_attempts: int = 3) -> Tuple[int, Optional[str]]:
+        attempt = 0
+        while attempt < max_attempts:
+            attempt += 1
+            try:
+                result = self._stream_process_chunk(chunk, chunk_index, summary)
+                input_length = len(chunk)
+                output_length = len(result)
+                if output_length < 0.6 * input_length or output_length > 2.5 * input_length:
+                    time.sleep(1)
+                    continue
+                voices_ok, missing = self._all_voices_exist(result)
+                if not voices_ok:
+                    safe_print(colored(f"Retrying chunk due to unknown voices: {', '.join(missing)}", 'yellow'))
+                    time.sleep(1)
+                    continue
+                return chunk_index, result
+            except Exception:
+                time.sleep(20)
+        return chunk_index, None
 
     def process_file(self, filename: str):
         """Process a single file through the pipeline only if all chunks succeed."""
@@ -261,82 +281,46 @@ class LongChainTextPreprocessor:
         input_path = os.path.join("1-raw-text", filename)
         with open(input_path, 'r', encoding='utf-8') as f:
             text = f.read()
-        total_expected_chars = len(text)
-        chunks = self._split_text_into_chunks(text, max_tokens=8000)
-        processed_chunks = []
-        accepted_segments: List[Tuple[int, int]] = []
-        all_chunks_succeeded = True
-        update_progress(self.current_file_identifier, MyProgressBar([], total_expected_chars, 0, self.current_file_identifier).render_string())
-        for i, chunk in enumerate(chunks, 1):
-            previous_chunks_text = '\n'.join(processed_chunks)
-            max_attempts = 3
-            attempt = 0
-            success = False
-            current_generated = ""
-            while attempt < max_attempts and not success:
-                attempt += 1
-                try:
-                    current_generated = self._stream_process_chunk(chunk, previous_chunks_text,
-                                                                accepted_segments, total_expected_chars, chunk_index=i-1)
-                    input_length = len(chunk)
-                    output_length = len(current_generated)
-                    if output_length < 0.6 * input_length or output_length > 2.5 * input_length:
-                        time.sleep(1)
-                    else:
-                        voices_ok, missing = self._all_voices_exist(current_generated)
-                        if not voices_ok:
-                            safe_print(colored(f"Retrying chunk due to unknown voices: {', '.join(missing)}", 'yellow'))
-                            time.sleep(1)
-                        else:
-                            success = True
-                except Exception as e:
-                    time.sleep(20)
-            if success:
-                accepted_segments.append((i-1, len(current_generated)))
-                processed_chunks.append(current_generated)
-            else:
-                safe_print(colored("Failed to generate. Language model did not produce enough or produced too many characters after 3 tries. Process for this file will be aborted.", 'red'))
-                all_chunks_succeeded = False
-                break
-            all_chunks_succeeded = all_chunks_succeeded and success
-            time.sleep(1)
-        if all_chunks_succeeded:
-            output_path = os.path.join("2-annotated-text", filename)
-            with open(output_path, 'w', encoding='utf-8') as f:
-                f.write('\n'.join(processed_chunks))
-            safe_print(colored(f"\n✓ Completed processing: 2-annotated-text/{filename}\n", 'green'))
-        else:
-            safe_print(colored("File processing incomplete due to failed chunks. Processed file not written.", 'red'))
-        with progress_lock:
-            progress_states.pop(self.current_file_identifier, None)
+        # Determine speakers first
+        speaker_summary = self._determine_speakers(text)
+        safe_print(colored("Speakers determined", 'green'))
+
+        chunks = self._split_text_into_chunks(text)
+        results: List[Optional[str]] = [None] * len(chunks)
+        stop_event = threading.Event()
+        printer = threading.Thread(target=progress_printer, args=(stop_event,), daemon=True)
+        printer.start()
+        with ThreadPoolExecutor(max_workers=min(10, len(chunks))) as executor:
+            futures = {executor.submit(self._process_chunk_with_retry, chunk, idx, speaker_summary): idx for idx, chunk in enumerate(chunks)}
+            for future in as_completed(futures):
+                idx, res = future.result()
+                if res is None:
+                    stop_event.set()
+                    printer.join()
+                    safe_print(colored("Failed to generate. Aborting file.", 'red'))
+                    return
+                results[idx] = res
+        stop_event.set()
+        printer.join()
+
+        output_path = os.path.join("2-annotated-text", filename)
+        with open(output_path, 'w', encoding='utf-8') as f:
+            f.write('\n'.join(results))
+        safe_print(colored(f"\n✓ Completed processing: 2-annotated-text/{filename}\n", 'green'))
 
     def process_all_files(self):
-        """Process all unprocessed .txt files in the 1-raw-text directory.
-        Runs up to three files concurrently."""
+        """Process all unprocessed .txt files sequentially."""
         unprocessed_files = self._get_unprocessed_files()
         if not unprocessed_files:
             safe_print(colored("No unprocessed .txt files found in 1-raw-text. Exiting.", 'gray'))
             sys.exit(0)
         safe_print(colored(f"Found {len(unprocessed_files)} files to process", 'yellow'))
 
-        def worker(fname: str):
-            processor = LongChainTextPreprocessor()
-            processor.process_file(fname)
-
-        max_workers = min(3, len(unprocessed_files))
-        stop_event = threading.Event()
-        printer = threading.Thread(target=progress_printer, args=(stop_event,), daemon=True)
-        printer.start()
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = {executor.submit(worker, f): f for f in unprocessed_files}
-            for future in as_completed(futures):
-                fname = futures[future]
-                try:
-                    future.result()
-                except Exception as e:
-                    safe_print(colored(f"Error processing {fname}: {str(e)}", 'red'))
-        stop_event.set()
-        printer.join()
+        for fname in unprocessed_files:
+            try:
+                self.process_file(fname)
+            except Exception as e:
+                safe_print(colored(f"Error processing {fname}: {str(e)}", 'red'))
 
 if __name__ == "__main__":
     try:
