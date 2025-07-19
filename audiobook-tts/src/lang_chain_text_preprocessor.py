@@ -1,4 +1,5 @@
 import os
+import re
 import yaml
 from typing import List, Optional, Tuple
 import time
@@ -9,7 +10,7 @@ from langchain.prompts import ChatPromptTemplate
 from langchain.callbacks.base import BaseCallbackHandler
 from langchain.callbacks.manager import CallbackManager
 
-from generate_helper import listAvailableVoices
+from generate_helper import listAvailableVoices, resolve_voice_name
 
 def colored(text: str, color: str) -> str:
     color_codes = {
@@ -135,11 +136,29 @@ class LongChainTextPreprocessor:
         processed_files = set(os.listdir("2-annotated-text"))
         return [f for f in raw_files if f not in processed_files]
 
-    def _split_text_into_chunks(self, text: str, chunk_size: int = 200) -> List[str]:
-        """Split text into chunks of specified number of lines."""
+    @staticmethod
+    def _estimate_tokens(text: str) -> int:
+        """Rudimentary token estimate used for chunk sizing."""
+        return max(1, len(text) // 4)
+
+    def _split_text_into_chunks(self, text: str, max_tokens: int = 8000) -> List[str]:
+        """Split text into chunks based on an estimated token limit."""
         lines = text.splitlines()
-        return ['\n'.join(lines[i:i + chunk_size])
-                for i in range(0, len(lines), chunk_size)]
+        chunks: List[str] = []
+        current_lines: List[str] = []
+        token_count = 0
+        for line in lines:
+            line_tokens = self._estimate_tokens(line + "\n")
+            if token_count + line_tokens > max_tokens and current_lines:
+                chunks.append("\n".join(current_lines))
+                current_lines = [line]
+                token_count = line_tokens
+            else:
+                current_lines.append(line)
+                token_count += line_tokens
+        if current_lines:
+            chunks.append("\n".join(current_lines))
+        return chunks
 
     @staticmethod
     def getVoiceString() -> str:
@@ -154,6 +173,22 @@ class LongChainTextPreprocessor:
                 for voice in sorted(voice_tiers[tier]):
                     voice_list.append(f"- {voice}")
         return "\n".join(voice_list)
+
+    @staticmethod
+    def _extract_voices(text: str) -> List[str]:
+        """Return all voice names referenced in <speaker> tags in the text."""
+        return re.findall(r'<speaker[^>]*voice="([^"]+)"[^>]*>', text, flags=re.IGNORECASE)
+
+    @staticmethod
+    def _voice_exists(voice: str) -> bool:
+        """Check if a voice exists, trying alternate prefixes for mixups."""
+        return resolve_voice_name(voice) is not None
+
+    def _all_voices_exist(self, text: str) -> Tuple[bool, List[str]]:
+        """Return True if every voice referenced in the text exists."""
+        voices = self._extract_voices(text)
+        missing = [v for v in voices if not self._voice_exists(v)]
+        return len(missing) == 0, missing
 
     def _stream_process_chunk(self, chunk: str, previous_chunk: Optional[str],
                               accepted_segments: List[Tuple[int, int]],
@@ -185,7 +220,7 @@ class LongChainTextPreprocessor:
         with open(input_path, 'r', encoding='utf-8') as f:
             text = f.read()
         total_expected_chars = len(text)
-        chunks = self._split_text_into_chunks(text)
+        chunks = self._split_text_into_chunks(text, max_tokens=8000)
         processed_chunks = []
         accepted_segments: List[Tuple[int, int]] = []
         all_chunks_succeeded = True
@@ -207,7 +242,12 @@ class LongChainTextPreprocessor:
                     if output_length < 0.6 * input_length or output_length > 2.5 * input_length:
                         time.sleep(1)
                     else:
-                        success = True
+                        voices_ok, missing = self._all_voices_exist(current_generated)
+                        if not voices_ok:
+                            print(colored(f"Retrying chunk due to unknown voices: {', '.join(missing)}", 'yellow'))
+                            time.sleep(1)
+                        else:
+                            success = True
                 except Exception as e:
                     time.sleep(20)
             if success:

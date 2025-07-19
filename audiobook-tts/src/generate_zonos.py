@@ -61,6 +61,11 @@ def generate_zonos_voice_lines(
     print("\033[90m" + f"Loading Zonos model...\033[0m")
     model = Zonos.from_pretrained("Zyphra/Zonos-v0.1-transformer", device=device)
 
+    PREVIEW_TEXT = (
+        "I don\u2019t know what your deal is or why General Mitchell believes that I can trust you on this mission, "
+        "but we have been wandering the desert for hours on end, and we are no closer to that damn town!"
+    )
+
     speaker_embedding_cache = {}
 
     def get_speaker_embedding(voice_name):
@@ -97,8 +102,44 @@ def generate_zonos_voice_lines(
         speaker_embedding_cache[voice_name] = spk_embedding
         return spk_embedding
 
+    def ensure_voice_previews(voice_names):
+        preview_dir = "voice-previews"
+        os.makedirs(preview_dir, exist_ok=True)
+        for voice in voice_names:
+            already_exists = False
+            for fname in os.listdir(preview_dir):
+                if os.path.splitext(fname)[0] == voice:
+                    already_exists = True
+                    break
+            if already_exists:
+                continue
+            print(f"\033[90mGenerating preview for {voice}...\033[0m")
+            speaker_embedding = get_speaker_embedding(voice)
+            emotion = EMOTION_VECTORS["neutral"].to(device)
+            cond_dict = make_cond_dict(text=PREVIEW_TEXT, speaker=speaker_embedding, emotion=emotion, language="en-us")
+            conditioning = model.prepare_conditioning(cond_dict)
+            min_p = 0.15
+            duration_ms = 250
+            sampling_rate = model.autoencoder.sampling_rate
+            num_samples = int(sampling_rate * duration_ms / 1000)
+            wav_prefix = torch.zeros(1, num_samples, device=device, dtype=torch.float32)
+            with torch.autocast(device_str, dtype=torch.float32):
+                audio_prefix_codes = model.autoencoder.encode(wav_prefix.unsqueeze(0))
+                codes = model.generate(prefix_conditioning=conditioning, audio_prefix_codes=audio_prefix_codes, sampling_params=dict(min_p=min_p))
+            wavs = model.autoencoder.decode(codes)
+            samples = wavs[0].cpu().numpy()
+            while samples.ndim > 2:
+                samples = np.squeeze(samples, axis=0)
+            if samples.ndim == 2:
+                samples = samples.transpose(1, 0)
+            out_path = os.path.join(preview_dir, voice + ".wav")
+            sf.write(out_path, samples.astype(np.float32), sampling_rate)
+
     generated_metadata = []
-    
+
+    unique_voices = {e["voice"] for e in zonos_entries}
+    ensure_voice_previews(unique_voices)
+
     max_attempts = config['models']['zonos']['max_retries']  # Maximum number of retries per entry
     max_silence_durationSeconds = config['models']['zonos'].get('max_silence_duration', 0)
     i = 0
