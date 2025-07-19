@@ -218,7 +218,7 @@ def generate_zonos_voice_lines(
             # If a maximum silence duration is set, resample to 16 kHz and check using the VAD helper.
             if max_silence_durationSeconds:
                 resampled_filename = os.path.join(temp_folder, f"chunk_{idx:04d}_16kHz.wav")
-                ffmpeg_cmd = f'ffmpeg -y -hide_banner -loglevel error-i "{out_filename}" -ar 16000 "{resampled_filename}"'
+                ffmpeg_cmd = f'ffmpeg -y -hide_banner -loglevel error -i "{out_filename}" -ar 16000 "{resampled_filename}"'
                 os.system(ffmpeg_cmd)
                 if not exceeds_silence_duration_threshold(resampled_filename, max_silence_durationSeconds):
                     if attempt < max_attempts - 1:

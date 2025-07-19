@@ -94,8 +94,6 @@ becomes
 
 If in a conversation a conversation, and the narrator simply says "pause", or "a pause", replace it with the <pause duration="long">
 
-Aalready edited parts of the story for reference (if applicable):
-{previous_chunk}
 
 Just acknowledge for now and wait for my next message. After you receive the next message, apply all these changes and reply with only the modified content in full, not omitting anything.
 
