@@ -56,6 +56,7 @@ class MyProgressBar:
         progress_bar += colored('|' * current_blocks, self._get_chunk_color(self.current_chunk_index))
         remaining = self.bar_length - overall_filled
         progress_bar += colored('-' * remaining, 'gray')
+        progress_bar += f" {overall_progress}/{self.total_expected_chars} chars"
         sys.stdout.write("\r" + progress_bar)
         sys.stdout.flush()
 
@@ -204,11 +205,11 @@ class LongChainTextPreprocessor:
                     input_length = len(chunk)
                     output_length = len(current_generated)
                     if output_length < 0.6 * input_length or output_length > 2.5 * input_length:
-                        time.sleep(100)
+                        time.sleep(1)
                     else:
                         success = True
                 except Exception as e:
-                    time.sleep(2000)
+                    time.sleep(20)
             if success:
                 accepted_segments.append((i-1, len(current_generated)))
                 processed_chunks.append(current_generated)

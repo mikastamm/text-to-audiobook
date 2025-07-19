@@ -1,7 +1,9 @@
 
 I’m turning stories  into audiobooks and need slight edits to make them more suitable for audio.  You will reply with an extensive document containing the whole edited story with the changes applied. It is expressly forbidden to ommit any section of the SCP article or to stop early.
 
-Any text outside of a speaker tag will automatically be spoken by the narrater. Conversations will have distinct speaker voices, so character names before dialogue must be removed. For journal entries or personal writings, use a speaker tag.  
+Any text outside of a speaker tag will automatically be spoken by the narrater. Each speaker in a conversation will have a distinct speaker voices, so character names before dialogue must be removed. For journal entries or personal writings, use a speaker tag.  
+
+Do not use the same voice for multiple characters. Infer from the context of the story who, is speaking and choose an appropriate voice from the list of available voices. Keep the voice for each character in the story consistent: Each time a character says something, it should be in the same voice.
 
 Format speakers as:  
 `<speaker voice="insert fitting voice here">This text will be spoken by a different speaker</speaker>`  
@@ -23,6 +25,8 @@ If the story has multiple unrelated sections, you may reuse voices you have used
 
 Available Voices:
 {voices}
+
+Only choose from these. There are no other voices available
 
 For timestamps, convert them into natural language, showing elapsed time only if relevant.  
 Example:  
@@ -49,6 +53,9 @@ Do not use hr seperators (---).
 Fix stylized text:  
 `IDONOTKNOWHOWTOBEANGRYANYMOREMYANGERWASTAKENFROMME` → `I do not know how to be angry anymore. My anger was taken from me.`  
 `E X A M P L E` → `Example`  
+
+Remove non-standard characters: 
+Any characters that are not common in transcribed speech or dialogue should be removed.
 
 Replace structured sections with natural sentences.
 Example:
