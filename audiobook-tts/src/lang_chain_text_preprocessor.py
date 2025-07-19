@@ -4,6 +4,8 @@ import yaml
 from typing import List, Optional, Tuple
 import time
 import sys
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from langchain.chat_models import ChatOpenAI
 from langchain.prompts import ChatPromptTemplate
@@ -27,39 +29,77 @@ def colored(text: str, color: str) -> str:
     reset = '\033[0m'
     return f"{color_codes.get(color, '')}{text}{reset}"
 
+# Lock used to synchronize console output across threads
+print_lock = threading.Lock()
+progress_lock = threading.Lock()
+progress_states: dict[str, str] = {}
+
+def update_progress(identifier: str, text: str):
+    """Update the progress buffer for a specific file."""
+    with progress_lock:
+        progress_states[identifier] = text
+
+def safe_print(*args, **kwargs):
+    """Thread-safe print function"""
+    with print_lock:
+        print(*args, **kwargs)
+
+def progress_printer(stop_event: threading.Event, refresh_interval: float = 0.5):
+    """Continuously print all progress bars from the buffer."""
+    last_lines = 0
+    while not stop_event.is_set():
+        with progress_lock:
+            lines = [progress_states[k] for k in sorted(progress_states.keys())]
+        with print_lock:
+            if last_lines:
+                sys.stdout.write('\x1b[%dA' % last_lines)
+            for line in lines:
+                sys.stdout.write('\r' + line.ljust(80) + '\n')
+            sys.stdout.flush()
+        last_lines = len(lines)
+        time.sleep(refresh_interval)
+    # final render
+    with progress_lock:
+        lines = [progress_states[k] for k in sorted(progress_states.keys())]
+    with print_lock:
+        if last_lines:
+            sys.stdout.write('\x1b[%dA' % last_lines)
+        for line in lines:
+            sys.stdout.write('\r' + line.ljust(80) + '\n')
+        sys.stdout.flush()
+
 # Custom progress bar class.
 class MyProgressBar:
     def __init__(self, accepted_segments: List[Tuple[int, int]], total_expected_chars: int,
-                 current_chunk_index: int, bar_length: int = 50):
+                 current_chunk_index: int, identifier: str, bar_length: int = 50):
         self.accepted_segments = accepted_segments
         self.total_expected_chars = total_expected_chars
         self.current_chunk_index = current_chunk_index
         self.bar_length = bar_length
+        self.identifier = identifier
         self.current_chunk_token_count01 = 0  # number of characters generated so far in this chunk
 
     def set_current(self, count: int):
         self.current_chunk_token_count01 = count
 
-    def render(self):
-        # Calculate overall progress (in characters)
+    def render_string(self) -> str:
+        """Return the rendered progress bar string."""
         accepted_total = sum(count for (_, count) in self.accepted_segments)
         overall_progress = accepted_total + self.current_chunk_token_count01
         overall_filled = int(overall_progress / self.total_expected_chars * self.bar_length)
-        
+
         progress_bar = ""
         accepted_blocks = 0
         for (chunk_idx, count) in self.accepted_segments:
             blocks = int(count / self.total_expected_chars * self.bar_length)
             accepted_blocks += blocks
             progress_bar += colored('|' * blocks, self._get_chunk_color(chunk_idx))
-        # Blocks for current chunk:
         current_blocks = overall_filled - accepted_blocks
         progress_bar += colored('|' * current_blocks, self._get_chunk_color(self.current_chunk_index))
         remaining = self.bar_length - overall_filled
         progress_bar += colored('-' * remaining, 'gray')
         progress_bar += f" {overall_progress}/{self.total_expected_chars} chars"
-        sys.stdout.write("\r" + progress_bar)
-        sys.stdout.flush()
+        return f"[{self.identifier}] {progress_bar}"
 
     def _get_chunk_color(self, chunk_index: int) -> str:
         colors = ['green', 'cyan', 'yellow', 'magenta', 'blue', 'red']
@@ -76,7 +116,7 @@ class ProgressCallback(BaseCallbackHandler):
         # Increment character count (using length of token)
         self.token_count01 += len(token)
         self.progress_bar.set_current(self.token_count01)
-        self.progress_bar.render()
+        update_progress(self.progress_bar.identifier, self.progress_bar.render_string())
         self.collected_text += token
 
 class LongChainTextPreprocessor:
@@ -95,7 +135,7 @@ class LongChainTextPreprocessor:
                     raise ValueError("LLM preprocessing configuration not found")
                 return config
         except Exception as e:
-            print(colored(f"Error loading config: {str(e)}", 'red'))
+            safe_print(colored(f"Error loading config: {str(e)}", 'red'))
             raise
 
     def _setup_llm(self) -> ChatOpenAI:
@@ -105,7 +145,7 @@ class LongChainTextPreprocessor:
             with open("gpt_secret_key.txt", 'r', encoding='utf-8') as f:
                 api_key = f.read().strip()
         except Exception as e:
-            print(colored(f"Error loading API key: {str(e)}", 'red'))
+            safe_print(colored(f"Error loading API key: {str(e)}", 'red'))
             raise
         # Create a CallbackManager and pass it to the LLM.
         callback_manager = CallbackManager(handlers=[])
@@ -127,7 +167,7 @@ class LongChainTextPreprocessor:
             with open(path, 'r', encoding='utf-8') as f:
                 return f.read()
         except Exception as e:
-            print(colored(f"Error loading prompt from {path}: {str(e)}", 'red'))
+            safe_print(colored(f"Error loading prompt from {path}: {str(e)}", 'red'))
             raise
 
     def _get_unprocessed_files(self) -> List[str]:
@@ -204,7 +244,8 @@ class LongChainTextPreprocessor:
             previous_chunk=previous_chunk if previous_chunk else "None",
             text=chunk
         )
-        progress_bar = MyProgressBar(accepted_segments, total_expected_chars, chunk_index)
+        progress_bar = MyProgressBar(accepted_segments, total_expected_chars, chunk_index, self.current_file_identifier)
+        update_progress(self.current_file_identifier, progress_bar.render_string())
         callback = ProgressCallback(progress_bar)
         # Temporarily add the callback to the LLM's callback manager.
         self.llm.callback_manager.add_handler(callback)
@@ -215,7 +256,8 @@ class LongChainTextPreprocessor:
 
     def process_file(self, filename: str):
         """Process a single file through the pipeline only if all chunks succeed."""
-        print(colored(f"\nAssigning speakers in text file {filename}", 'white'))
+        self.current_file_identifier = os.path.basename(filename)
+        safe_print(colored(f"\nAssigning speakers in text file {filename}", 'white'))
         input_path = os.path.join("1-raw-text", filename)
         with open(input_path, 'r', encoding='utf-8') as f:
             text = f.read()
@@ -224,17 +266,16 @@ class LongChainTextPreprocessor:
         processed_chunks = []
         accepted_segments: List[Tuple[int, int]] = []
         all_chunks_succeeded = True
+        update_progress(self.current_file_identifier, MyProgressBar([], total_expected_chars, 0, self.current_file_identifier).render_string())
         for i, chunk in enumerate(chunks, 1):
             previous_chunks_text = '\n'.join(processed_chunks)
-            max_attempts =3
+            max_attempts = 3
             attempt = 0
             success = False
             current_generated = ""
             while attempt < max_attempts and not success:
                 attempt += 1
                 try:
-                
-                    sys.stdout.write("\r" + " " * 80 + "\r")
                     current_generated = self._stream_process_chunk(chunk, previous_chunks_text,
                                                                 accepted_segments, total_expected_chars, chunk_index=i-1)
                     input_length = len(chunk)
@@ -244,7 +285,7 @@ class LongChainTextPreprocessor:
                     else:
                         voices_ok, missing = self._all_voices_exist(current_generated)
                         if not voices_ok:
-                            print(colored(f"Retrying chunk due to unknown voices: {', '.join(missing)}", 'yellow'))
+                            safe_print(colored(f"Retrying chunk due to unknown voices: {', '.join(missing)}", 'yellow'))
                             time.sleep(1)
                         else:
                             success = True
@@ -254,7 +295,7 @@ class LongChainTextPreprocessor:
                 accepted_segments.append((i-1, len(current_generated)))
                 processed_chunks.append(current_generated)
             else:
-                print(colored("Failed to generate. Language model did not produce enough or produced too many characters after 3 tries. Process for this file will be aborted.", 'red'))
+                safe_print(colored("Failed to generate. Language model did not produce enough or produced too many characters after 3 tries. Process for this file will be aborted.", 'red'))
                 all_chunks_succeeded = False
                 break
             all_chunks_succeeded = all_chunks_succeeded and success
@@ -263,27 +304,43 @@ class LongChainTextPreprocessor:
             output_path = os.path.join("2-annotated-text", filename)
             with open(output_path, 'w', encoding='utf-8') as f:
                 f.write('\n'.join(processed_chunks))
-            print(colored(f"\n✓ Completed processing: 2-annotated-text/{filename}\n", 'green'))
+            safe_print(colored(f"\n✓ Completed processing: 2-annotated-text/{filename}\n", 'green'))
         else:
-            print(colored("File processing incomplete due to failed chunks. Processed file not written.", 'red'))
+            safe_print(colored("File processing incomplete due to failed chunks. Processed file not written.", 'red'))
+        with progress_lock:
+            progress_states.pop(self.current_file_identifier, None)
 
     def process_all_files(self):
         """Process all unprocessed .txt files in the 1-raw-text directory.
-        Exits immediately if no unprocessed files are found."""
+        Runs up to three files concurrently."""
         unprocessed_files = self._get_unprocessed_files()
         if not unprocessed_files:
-            print(colored("No unprocessed .txt files found in 1-raw-text. Exiting.", 'gray'))
+            safe_print(colored("No unprocessed .txt files found in 1-raw-text. Exiting.", 'gray'))
             sys.exit(0)
-        print(colored(f"Found {len(unprocessed_files)} files to process", 'yellow'))
-        for filename in unprocessed_files:
-            try:
-                self.process_file(filename)
-            except Exception as e:
-                print(colored(f"Error processing {filename}: {str(e)}", 'red'))
+        safe_print(colored(f"Found {len(unprocessed_files)} files to process", 'yellow'))
+
+        def worker(fname: str):
+            processor = LongChainTextPreprocessor()
+            processor.process_file(fname)
+
+        max_workers = min(3, len(unprocessed_files))
+        stop_event = threading.Event()
+        printer = threading.Thread(target=progress_printer, args=(stop_event,), daemon=True)
+        printer.start()
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {executor.submit(worker, f): f for f in unprocessed_files}
+            for future in as_completed(futures):
+                fname = futures[future]
+                try:
+                    future.result()
+                except Exception as e:
+                    safe_print(colored(f"Error processing {fname}: {str(e)}", 'red'))
+        stop_event.set()
+        printer.join()
 
 if __name__ == "__main__":
     try:
         processor = LongChainTextPreprocessor()
         processor.process_all_files()
     except Exception as e:
-        print(colored(f"Fatal error: {str(e)}", 'red'))
+        safe_print(colored(f"Fatal error: {str(e)}", 'red'))
