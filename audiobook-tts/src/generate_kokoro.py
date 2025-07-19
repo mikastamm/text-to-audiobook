@@ -83,6 +83,19 @@ def generate_kokoro_voice_lines(modelPath, voicesPath, temp_folder="temp", voice
         elif resolved_voice is None:
             print(f"\033[33mVoice {voice} not found; using provided name anyway.\033[0m")
         text_chunk = entry["text"]
+        out_filename = os.path.join(temp_folder, f"chunk_{idx:04d}.wav")
+
+        if os.path.exists(out_filename):
+            try:
+                info = sf.info(out_filename)
+                if info.frames > 0:
+                    print(f"\033[90mChunk {idx} already exists. Skipping generation.\033[0m")
+                    entry["filename"] = out_filename
+                    generated_metadata.append(entry)
+                    continue
+            except Exception:
+                print(f"\033[33mExisting file {out_filename} is invalid. Regenerating.\033[0m")
+
         print_generation_status("Kokoro", idx + 1, len(kokoro_entries), len(text_chunk),
                                 kokoro_min_chars, kokoro_max_chars, text_chunk)
         current_sample_rate = SAMPLE_RATE
@@ -91,7 +104,7 @@ def generate_kokoro_voice_lines(modelPath, voicesPath, temp_folder="temp", voice
             samples = np.zeros(int(silence_durationSec * current_sample_rate), dtype=np.float32)
         else:
             samples, _ = kokoro.create(text_chunk, voice=voice, speed=voiceSpeed01)
-        out_filename = os.path.join(temp_folder, f"chunk_{idx:04d}.wav")
+
         sf.write(out_filename, samples, current_sample_rate)
         entry["filename"] = out_filename
         generated_metadata.append(entry)
