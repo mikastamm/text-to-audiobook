@@ -136,11 +136,29 @@ class LongChainTextPreprocessor:
         processed_files = set(os.listdir("2-annotated-text"))
         return [f for f in raw_files if f not in processed_files]
 
-    def _split_text_into_chunks(self, text: str, chunk_size: int = 200) -> List[str]:
-        """Split text into chunks of specified number of lines."""
+    @staticmethod
+    def _estimate_tokens(text: str) -> int:
+        """Rudimentary token estimate used for chunk sizing."""
+        return max(1, len(text) // 4)
+
+    def _split_text_into_chunks(self, text: str, max_tokens: int = 8000) -> List[str]:
+        """Split text into chunks based on an estimated token limit."""
         lines = text.splitlines()
-        return ['\n'.join(lines[i:i + chunk_size])
-                for i in range(0, len(lines), chunk_size)]
+        chunks: List[str] = []
+        current_lines: List[str] = []
+        token_count = 0
+        for line in lines:
+            line_tokens = self._estimate_tokens(line + "\n")
+            if token_count + line_tokens > max_tokens and current_lines:
+                chunks.append("\n".join(current_lines))
+                current_lines = [line]
+                token_count = line_tokens
+            else:
+                current_lines.append(line)
+                token_count += line_tokens
+        if current_lines:
+            chunks.append("\n".join(current_lines))
+        return chunks
 
     @staticmethod
     def getVoiceString() -> str:
@@ -211,7 +229,7 @@ class LongChainTextPreprocessor:
         with open(input_path, 'r', encoding='utf-8') as f:
             text = f.read()
         total_expected_chars = len(text)
-        chunks = self._split_text_into_chunks(text)
+        chunks = self._split_text_into_chunks(text, max_tokens=8000)
         processed_chunks = []
         accepted_segments: List[Tuple[int, int]] = []
         all_chunks_succeeded = True
