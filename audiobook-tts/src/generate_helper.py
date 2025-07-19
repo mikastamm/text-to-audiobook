@@ -1,6 +1,7 @@
 import os
 from silero_vad import load_silero_vad, read_audio, get_speech_timestamps
 import numpy as np
+from typing import Optional
 
 def print_generation_status(model_name, i, total, num_chars_of_sentence, min_characters_for_model, max_characters_for_model, text):
     """
@@ -92,6 +93,34 @@ def listAvailableVoices():
             })
 
     return voices
+
+def resolve_voice_name(voice: str, speakers_dir: str = "0-speakers") -> Optional[str]:
+    """Return a matching voice name if available, trying alternate tier prefixes."""
+    if voice in {"af_heart", "af_bella"}:
+        return voice
+    if not os.path.exists(speakers_dir):
+        return None
+
+    allowed_extensions = (".wav", ".mp3", ".ogg", ".flac", ".m4a", ".bin")
+    available = {os.path.splitext(f)[0] for f in os.listdir(speakers_dir)
+                 if any(f.lower().endswith(ext) for ext in allowed_extensions)}
+    if voice in available:
+        return voice
+
+    prefixes = ["s_", "a_", "b_", "x_"]
+
+    def strip_prefix(name: str) -> str:
+        for p in prefixes:
+            if name.startswith(p):
+                return name[len(p):]
+        return name
+
+    base = strip_prefix(voice)
+    for p in prefixes:
+        alt = p + base
+        if alt in available:
+            return alt
+    return None
 
 def print_header(text):
     """

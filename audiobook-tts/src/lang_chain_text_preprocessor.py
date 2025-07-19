@@ -10,7 +10,7 @@ from langchain.prompts import ChatPromptTemplate
 from langchain.callbacks.base import BaseCallbackHandler
 from langchain.callbacks.manager import CallbackManager
 
-from generate_helper import listAvailableVoices
+from generate_helper import listAvailableVoices, resolve_voice_name
 
 def colored(text: str, color: str) -> str:
     color_codes = {
@@ -181,17 +181,8 @@ class LongChainTextPreprocessor:
 
     @staticmethod
     def _voice_exists(voice: str) -> bool:
-        """Check if a voice exists in speakers or is a built-in kokoro voice."""
-        if voice in {"af_heart", "af_bella"}:
-            return True
-        speakers_dir = "speakers"
-        if not os.path.exists(speakers_dir):
-            return False
-        for filename in os.listdir(speakers_dir):
-            name, _ = os.path.splitext(filename)
-            if name == voice:
-                return True
-        return False
+        """Check if a voice exists, trying alternate prefixes for mixups."""
+        return resolve_voice_name(voice) is not None
 
     def _all_voices_exist(self, text: str) -> Tuple[bool, List[str]]:
         """Return True if every voice referenced in the text exists."""

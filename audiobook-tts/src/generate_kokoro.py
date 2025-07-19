@@ -6,7 +6,7 @@ import requests
 import yaml
 from kokoro_onnx import Kokoro
 from kokoro_onnx.config import SAMPLE_RATE
-from generate_helper import print_generation_status
+from generate_helper import print_generation_status, resolve_voice_name
 
 with open("configuration.yaml", "r") as f:
     config = yaml.safe_load(f)
@@ -76,6 +76,12 @@ def generate_kokoro_voice_lines(modelPath, voicesPath, temp_folder="temp", voice
     for entry in kokoro_entries:
         idx = entry["index"]
         voice = entry["voice"]
+        resolved_voice = resolve_voice_name(voice, speakers_dir=voicesPath)
+        if resolved_voice and resolved_voice != voice:
+            print(f"\033[90mResolved voice {voice} -> {resolved_voice}\033[0m")
+            voice = resolved_voice
+        elif resolved_voice is None:
+            print(f"\033[33mVoice {voice} not found; using provided name anyway.\033[0m")
         text_chunk = entry["text"]
         print_generation_status("Kokoro", idx + 1, len(kokoro_entries), len(text_chunk),
                                 kokoro_min_chars, kokoro_max_chars, text_chunk)
